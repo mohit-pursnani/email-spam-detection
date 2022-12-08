@@ -1,0 +1,97 @@
+# This is used to create resources with stack
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: AWS Email Spam Detection Cloud Formation Stack
+Parameters:
+  EndPointName:
+    Type: String
+Resources:
+ S3BucketStoringEmailCloudFormation:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: aws-email-store-5454
+ BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: '*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref S3BucketStoringEmailCloudFormation
+                - /*
+      Bucket: !Ref S3BucketStoringEmailCloudFormation
+ EmailLambdaCLoudFormation:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: emaillambdacloudformation-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+            - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
+      Path: /
+ LambdaFunctionEmail:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://codestorebucket/email_lambda_cloudformation.zip
+      Description: Lambda function for Email
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Ref EndPointName
+      FunctionName: email_lambda_cloudformation
+      Layers: 
+        - arn:aws:lambda:us-east-1:668099181075:layer:AWSLambda-Python37-SciPy1x:115
+      Handler: lambda_function.lambda_handler
+      MemorySize: 512
+      Role: 
+       Fn::GetAtt:
+          - EmailLambdaCLoudFormation
+          - Arn
+      Runtime: python3.7
+      Timeout: 60
+      Events:
+        S3BucketStoringEmailCloudFormation:
+          Type: S3
+          Properties:
+            Bucket:
+              !Ref S3BucketStoringEmailCloudFormation
+            Events:
+              - s3:ObjectCreated:Put
+ SesRuleSet:
+  Type: 'AWS::SES::ReceiptRuleSet'
+ SesRule:
+  Type: 'AWS::SES::ReceiptRule'
+  Properties:
+    Rule:
+      Actions:
+        - S3Action:
+            BucketName: !Ref S3BucketStoringEmailCloudFormation
+      Enabled: true
+      ScanEnabled: false
+    RuleSetName: !Ref SesRuleSet
+ AllowS3ToCallLambdaPermission:
+  Type: AWS::Lambda::Permission
+  Properties:
+    Action: 'lambda:InvokeFunction'
+    FunctionName: !Ref LambdaFunctionEmail
+    Principal: s3.amazonaws.com
+    SourceArn: !GetAtt S3BucketStoringEmailCloudFormation.Arn
+  
