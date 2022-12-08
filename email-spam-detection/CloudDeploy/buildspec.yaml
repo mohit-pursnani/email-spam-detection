@@ -1,0 +1,11 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - aws cloudformation package --template-file stack.yaml --s3-bucket codestorebucket --output-template-file outputTemplate.yaml
+artifacts:
+  type: zip
+  files:
+    - stack.yaml
+    - outputTemplate.yaml
+    - 'LF1/*'
